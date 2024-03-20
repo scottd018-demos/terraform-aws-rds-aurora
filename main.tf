@@ -17,12 +17,16 @@ provider "aws" {
 #########################
 
 data "aws_subnet" "region_p" {
+  provider = aws.primary
+
   count = length(var.private_subnet_ids_p)
 
   id = var.private_subnet_ids_p[count.index]
 }
 
 data "aws_subnet" "region_s" {
+  provider = aws.secondary
+
   count = length(var.private_subnet_ids_s)
 
   id = var.private_subnet_ids_s[count.index]

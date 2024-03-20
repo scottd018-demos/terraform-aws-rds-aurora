@@ -16,21 +16,17 @@ provider "aws" {
 # Collect data
 #########################
 
-data "aws_availability_zones" "region_p" {
-  state    = "available"
-  provider = aws.primary
+data "aws_subnet" "region_p" {
+  count = length(var.private_subnet_ids_p)
+
+  id = var.private_subnet_ids_p[count.index]
 }
 
-data "aws_availability_zones" "region_s" {
-  state    = "available"
-  provider = aws.secondary
-}
+data "aws_subnet" "region_s" {
+  count = length(var.private_subnet_ids_s)
 
-/*
-data "aws_subnet_ids" "private" {
-  vpc_id = var.vpc_id
+  id = var.private_subnet_ids_s[count.index]
 }
-*/
 
 data "aws_rds_engine_version" "family" {
   engine   = var.engine
@@ -164,7 +160,7 @@ resource "aws_rds_cluster" "primary" {
   engine                      = var.engine
   engine_version              = var.engine == "aurora-postgresql" ? var.engine_version_pg : var.engine_version_mysql
   allow_major_version_upgrade = var.allow_major_version_upgrade
-  availability_zones          = [data.aws_availability_zones.region_p.names[0], data.aws_availability_zones.region_p.names[1], data.aws_availability_zones.region_p.names[2]]
+  availability_zones          = [data.aws_subnet.region_p[0].availability_zone, data.aws_subnet.region_p[1].availability_zone, data.aws_subnet.region_p[2].availability_zone]
   db_subnet_group_name        = aws_db_subnet_group.private_p.name
   port                        = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
   database_name               = var.setup_as_secondary || (var.snapshot_identifier != "") ? null : var.database_name
@@ -243,7 +239,7 @@ resource "aws_rds_cluster" "secondary" {
   engine                           = var.engine
   engine_version                   = var.engine == "aurora-postgresql" ? var.engine_version_pg : var.engine_version_mysql
   allow_major_version_upgrade      = var.allow_major_version_upgrade
-  availability_zones               = [data.aws_availability_zones.region_s.names[0], data.aws_availability_zones.region_s.names[1], data.aws_availability_zones.region_s.names[2]]
+  availability_zones               = [data.aws_subnet.region_s[0].availability_zone, data.aws_subnet.region_s[1].availability_zone, data.aws_subnet.region_s[2].availability_zone]
   db_subnet_group_name             = aws_db_subnet_group.private_s[0].name
   port                             = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
   db_cluster_parameter_group_name  = aws_rds_cluster_parameter_group.aurora_cluster_parameter_group_s[0].id

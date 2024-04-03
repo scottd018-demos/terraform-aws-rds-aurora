@@ -32,18 +32,6 @@ data "aws_subnet" "region_s" {
   id = var.private_subnet_ids_s[count.index]
 }
 
-data "aws_vpc" "region_p" {
-  provider = aws.primary
-
-  id = data.aws_subnet.region_p[0].vpc_id
-}
-
-data "aws_vpc" "region_s" {
-  provider = aws.secondary
-
-  id = data.aws_subnet.region_s[0].vpc_id
-}
-
 data "aws_rds_engine_version" "family" {
   engine   = var.engine
   version  = var.engine == "aurora-postgresql" ? var.engine_version_pg : var.engine_version_mysql
@@ -100,12 +88,10 @@ resource "aws_security_group" "rds_primary" {
   )
 
   ingress {
-    from_port = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
-    to_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
-    protocol  = "tcp"
-    cidr_blocks = [
-      data.aws_vpc.region_p.cidr_block
-    ]
+    from_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    to_port     = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -134,12 +120,10 @@ resource "aws_security_group" "rds_secondary" {
   )
 
   ingress {
-    from_port = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
-    to_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
-    protocol  = "tcp"
-    cidr_blocks = [
-      data.aws_vpc.region_s.cidr_block
-    ]
+    from_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    to_port     = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {

@@ -32,6 +32,18 @@ data "aws_subnet" "region_s" {
   id = var.private_subnet_ids_s[count.index]
 }
 
+data "aws_vpc" "region_p" {
+  provider = aws.primary
+
+  id = data.aws_subnet.region_p[0].vpc_id
+}
+
+data "aws_vpc" "region_s" {
+  provider = aws.secondary
+
+  id = data.aws_subnet.region_s[0].vpc_id
+}
+
 data "aws_rds_engine_version" "family" {
   engine   = var.engine
   version  = var.engine == "aurora-postgresql" ? var.engine_version_pg : var.engine_version_mysql
@@ -65,12 +77,83 @@ resource "random_password" "master_password" {
 ####################################
 
 resource "random_id" "snapshot_id" {
-
   keepers = {
     id = var.identifier
   }
 
   byte_length = 4
+}
+
+################
+# Security Group
+################
+
+resource "aws_security_group" "rds_primary" {
+  provider = aws.primary
+  name     = "${var.identifier}-rds"
+  vpc_id   = data.aws_subnet.region_p[0].vpc_id
+
+  tags = merge(var.tags,
+    {
+      "Name" = "${var.identifier}-rds"
+    }
+  )
+
+  ingress {
+    from_port = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    to_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    protocol  = "tcp"
+    cidr_blocks = [
+      data.aws_vpc.region_p.cidr_block
+    ]
+  }
+
+  egress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_security_group" "rds_secondary" {
+  provider = aws.secondary
+  name     = "${var.identifier}-rds"
+  vpc_id   = data.aws_subnet.region_s[0].vpc_id
+
+  tags = merge(var.tags,
+    {
+      "Name" = "${var.identifier}-rds"
+    }
+  )
+
+  ingress {
+    from_port = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    to_port   = var.port == "" ? var.engine == "aurora-postgresql" ? "5432" : "3306" : var.port
+    protocol  = "tcp"
+    cidr_blocks = [
+      data.aws_vpc.region_s.cidr_block
+    ]
+  }
+
+  egress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 ###########
@@ -82,7 +165,7 @@ resource "aws_db_subnet_group" "private_p" {
   name       = "${var.name}-sg"
   subnet_ids = var.private_subnet_ids_p
   tags = {
-    Name = "My DB subnet group"
+    Name = "${var.name}-sg"
   }
 }
 
@@ -92,7 +175,7 @@ resource "aws_db_subnet_group" "private_s" {
   name       = "${var.name}-sg"
   subnet_ids = var.private_subnet_ids_s
   tags = {
-    Name = "My DB subnet group"
+    Name = "${var.name}-sg"
   }
 }
 
@@ -186,6 +269,7 @@ resource "aws_rds_cluster" "primary" {
   final_snapshot_identifier       = var.skip_final_snapshot ? null : "${var.final_snapshot_identifier_prefix}-${var.identifier}-${var.region}-${random_id.snapshot_id.hex}"
   snapshot_identifier             = var.snapshot_identifier != "" ? var.snapshot_identifier : null
   enabled_cloudwatch_logs_exports = local.logs_set
+  vpc_security_group_ids          = [aws_security_group.rds_primary.id]
   tags                            = var.tags
 
   dynamic "serverlessv2_scaling_configuration" {
@@ -257,6 +341,7 @@ resource "aws_rds_cluster" "secondary" {
   skip_final_snapshot              = var.skip_final_snapshot
   final_snapshot_identifier        = var.skip_final_snapshot ? null : "${var.final_snapshot_identifier_prefix}-${var.identifier}-${var.sec_region}-${random_id.snapshot_id.hex}"
   enabled_cloudwatch_logs_exports  = local.logs_set
+  vpc_security_group_ids           = [aws_security_group.rds_secondary.id]
   tags                             = var.tags
 
   dynamic "serverlessv2_scaling_configuration" {

@@ -325,6 +325,7 @@ resource "aws_rds_cluster" "secondary" {
   skip_final_snapshot              = var.skip_final_snapshot
   final_snapshot_identifier        = var.skip_final_snapshot ? null : "${var.final_snapshot_identifier_prefix}-${var.identifier}-${var.sec_region}-${random_id.snapshot_id.hex}"
   enabled_cloudwatch_logs_exports  = local.logs_set
+  enable_global_write_forwarding   = true
   vpc_security_group_ids           = [aws_security_group.rds_secondary.id]
   tags                             = var.tags
 
